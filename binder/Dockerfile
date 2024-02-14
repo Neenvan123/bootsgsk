@@ -103,7 +103,7 @@ COPY --chown=${NB_USER}:users binder/rasa ${RASA_WS}/src/
 # install the dependencies and packages in the requirements file
 # RUN pip install --no-cache-dir -r requirements.txt
 # RUN pip install pipenv
-# RUN pipenv install rasa==3.6.16
+RUN pip install --no-warn-conflicts --ignore-installed rasa>=3.6
 # -----------------------------------------------------------------------------
 
 # Copy the giskard tmp meshes to skip the converting step
