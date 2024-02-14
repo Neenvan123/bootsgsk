@@ -6,39 +6,47 @@ RUN pip install https://raw.githubusercontent.com/yxzhan/jupyterlab-rviz/master/
 RUN mamba install -y ripgrep
 RUN pip install --upgrade \
   sidecar \
-  mujoco \
+  Cython \
   jupyterlab-git \
   jupyterlab-unfold \
   jupyter-archive \
   jupyterlab-search-replace \
   jupyter-offlinenotebook \
-  jupyter-collaboration \
   jupyterlab-language-pack-de-DE  \
   jupyterlab_execute_time
-
-USER root
-RUN apt update && apt install -y ffmpeg
-USER ${NB_USER}
 
 # Initiate ROS workspace 
 ENV ROS_WS=/home/${NB_USER}/workspace/ros
 WORKDIR ${ROS_WS}/src
+# A Workaround for fixing the issue of RvizWeb loading meshes with "file:///" path instead of "package:///".
 COPY --chown=${NB_USER}:users binder/me ${ROS_WS}/src/me
-RUN pip install vcstool
 COPY --chown=${NB_USER}:users binder/noetic.rosinstall /home/${NB_USER}/noetic.rosinstall
-RUN vcs import --input /home/${NB_USER}/noetic.rosinstall --recursive
+RUN wstool merge /home/${NB_USER}/noetic.rosinstall \
+  && wstool update
+# Clone repos with git ssh url in .gitmodules
+RUN git clone https://github.com/maltehue/mujoco_robots.git \
+  && cd mujoco_robots \
+  && perl -i -p -e 's|git@(.*?):|https://\1/|g' .gitmodules \
+  && git submodule sync \
+  && git submodule update --init --recursive
+RUN git clone https://github.com/HoangGiang93/mujoco_world.git \
+  && cd mujoco_world \
+  && perl -i -p -e 's|git@(.*?):|https://\1/|g' .gitmodules \
+  && git submodule sync \
+  && git submodule update --init --recursive
 
 # Install dependencies
 WORKDIR  ${ROS_WS}
 USER root
 RUN rosdep update && apt update && apt dist-upgrade -y \
   && rosdep install -y --ignore-src --from-paths ./ -r \
-  && rosdep fix-permissions
+  && rosdep fix-permissions \
+  && apt install -y ffmpeg libglfw3 libglfw3-dev
 USER ${NB_USER}
 RUN pip install -r src/giskardpy/requirements.txt
 
-# Install missing python packages (should be included in giskardpy/requirements.txt)
-RUN pip install termcolor pydot
+# Install missing python packages (should be included in requirements.txt)
+RUN pip install termcolor pydot triangle cython~=0.19
 
 # Building Custom bullet3 from source with Python 3.10 (in a clumsy way)
 WORKDIR /home/${NB_USER}
@@ -58,13 +66,50 @@ ENV PYTHONPATH=${PYTHONPATH}:/home/${NB_USER}/bullet3/build_cmake/better_python:
 
 # Build ROS workspace
 WORKDIR  ${ROS_WS}
+RUN rm -rf src/iai_pr2/iai_pr2_donbot
 RUN catkin build
 
-# Update RvizWeb
-RUN cd ${ROS_WS}/src/rvizweb && git pull
+RUN pip install --upgrade \
+  jupyter-collaboration \
+  openai \
+  jupyter-ai
+
+# Chatbot configs
+COPY --chown=${NB_USER}:users binder/jupyter-ai.json /home/${NB_USER}/.local/share/jupyter/jupyter_ai/config.json
+ENV OPENAI_API_BASE="http://192.168.240.1:5002"
+ENV OPENAI_API_KEY="sk-4e6e40294b4da6fd87ddc0a4aae645a4"
+
+# -----------------------------------------------------------------------------
+# Initiate BOOTSTRAP workspace 
+ENV BOOT_WS=/home/${NB_USER}/workspace/bootstrap
+WORKDIR ${BOOT_WS}/src
+COPY --chown=${NB_USER}:users binder/bootstrap ${BOOT_WS}/src/
+
+# install the dependencies and packages in the requirements file
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN spacy download en_core_web_sm
+
+RUN python -m nltk.downloader punkt && python -m nltk.downloader wordnet
+# -----------------------------------------------------------------------------
+# Initiate RASA workspace 
+ENV RASA_WS=/home/${NB_USER}/workspace/rasa
+WORKDIR ${RASA_WS}/src
+COPY --chown=${NB_USER}:users binder/rasa ${RASA_WS}/src/
+# RUN pip install rasa==3.6.0
+# Create a new Conda environment based on the environment.yml file
+# RUN conda env create --file environment.yml
+
+# install the dependencies and packages in the requirements file
+# RUN pip install --no-cache-dir -r requirements.txt
+# RUN pip install pipenv
+# RUN pipenv install rasa==3.6.16
+# -----------------------------------------------------------------------------
 
 # Copy the giskard tmp meshes to skip the converting step
 COPY --chown=${NB_USER}:users binder/giskard_decomposed_obj ${ROS_WS}/src/giskardpy/tmp
+# The giskard standalone is not publishing tf by default change it to true by default
+RUN sed -i 's/publish_tf: bool = False/publish_tf: bool = True/g' ${ROS_WS}/src/giskardpy/src/giskardpy/configs/behavior_tree_config.py
 # Copy contents of the repo into the image
 COPY --chown=${NB_USER}:users . /home/${NB_USER}/giskard_examples
 WORKDIR /home/${NB_USER}/giskard_examples
@@ -76,18 +121,4 @@ COPY --chown=${NB_USER}:users binder/entrypoint.sh /
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["start-notebook.sh"]
 
-# === Add Stretch robot from giskard:devel ===
-# === (To be deleted after stretch add to giskard:master) ===
-
-WORKDIR  ${ROS_WS}/src/giskardpy
-ARG GISKARD_COMMIT_PREFIX=https://raw.githubusercontent.com/SemRoCo/giskardpy/ee1daaf2cfdf70c9981d63f6a7dfd5b4626b77ff
-RUN cd src/giskardpy/configs/iai_robots && \
-  wget ${GISKARD_COMMIT_PREFIX}/src/giskardpy/configs/iai_robots/stretch.py
-RUN cd self_collision_matrices/iai && \
-  wget ${GISKARD_COMMIT_PREFIX}/self_collision_matrices/iai/stretch.srdf
-RUN cd scripts/iai_robots && \
-  mkdir stretch && cd stretch && \
-  wget ${GISKARD_COMMIT_PREFIX}/scripts/iai_robots/stretch/stretch_standalone.py && \
-  chmod +x stretch_standalone.py
-WORKDIR /home/${NB_USER}/giskard_examples
-# === End ===
+RUN cd ${ROS_WS}/src/rvizweb && git pull
