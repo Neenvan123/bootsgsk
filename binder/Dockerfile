@@ -93,3 +93,5 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["start-notebook.sh"]
 
 RUN pip install --upgrade --force-reinstall flask-sqlalchemy sqlalchemy
+
+RUN cd ${ROS_WS}/mujoco_robots && git pull
