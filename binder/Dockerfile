@@ -88,7 +88,7 @@ COPY --chown=${NB_USER}:users binder/bootstrap ${BOOT_WS}/src/
 # install the dependencies and packages in the requirements file
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN spacy download en_core_web_sm
+RUN spacy download en_core_web_sm && spacy download en_core_web_trf
 
 RUN python -m nltk.downloader punkt && python -m nltk.downloader wordnet
 # -----------------------------------------------------------------------------
