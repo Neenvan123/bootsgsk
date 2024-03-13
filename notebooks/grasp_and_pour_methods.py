@@ -80,6 +80,18 @@ def tilt(giskard: GiskardWrapper, angle: float, velocity: float, rotation_axis: 
     giskard.add_default_end_motion_conditions()
     giskard.execute()
 
+def grasp(giskard: GiskardWrapper, object_name: str, robot_eeff: str, grasp_side: str, upright_axis: str, second_axis: str):
+    # Here starts the control
+    # Open the gripper. Needs the giskard interface as input, as all the other methods
+    openGripper(giskard)
+
+    # This aligns the control frame to the front of the object frame in a distance of 0.04m.
+    align_to(giskard, grasp_side, axis_align_to_z=upright_axis, object_frame=object_name, control_frame=robot_eeff,
+             axis_align_to_x=second_axis, distance=0.04)
+
+    # Close the gripper
+    closeGripper(giskard)
+    giskard.execute()
 
 # if __name__ == '__main__':
 #     # Before running this script make sure to start a giskard instance using 'roslaunch giskardpy giskardpy_hsr_mujoco.launch'
