@@ -16,7 +16,7 @@ def run_pip_install():
     except ImportError:
         print("RASA package not available")
         print('Installing RASA')
-        rasa_command = "pip install -q --upgrade pip && pip install --no-deps rasa && pip install --no-deps rasa-sdk"
+        rasa_command = "pip install -q --upgrade pip && pip install rasa"
         # process = subprocess.run(rasa_command, shell=True, capture_output=True, text=True)
         process = subprocess.Popen(rasa_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in iter(process.stdout.readline, ''):
