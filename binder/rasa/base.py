@@ -1,35 +1,52 @@
-# rasa run --enable-api --debug
-import Python_Queries.preprocessors
-import Python_Queries.call_rasa
-import Python_Queries.postprocessings
-from Python_Queries import test
-def main():
-    user_input = input("Enter an NL instruction: ")
-    print("You entered:", user_input.lower())
-    
-    compound_props = Python_Queries.preprocessors.preprocessing(user_input.lower())
-    # print("processsed input: ",compound_props['compounded_text'])
+import ipywidgets as widgets
+class EditableDictionaryDisplay:
+    def __init__(self, dictionary):
+        self._dictionary = dictionary
+        self._output = widgets.Output()
+        self._edit_button = widgets.Button(description="Edit")
+        self._edit_button.on_click(self._toggle_editable)
+        self._editable = False
+        self._editable_widgets = {}
+        self.grid = None
+        
+    def display(self):
+        self._refresh_output()
+        self.grid = widgets.GridBox([self._output, widgets.HBox([self._edit_button])], layout=widgets.Layout(grid_template_rows="1fr 1fr"))
+        display(self.grid)
 
-    try:
-        rasa_out = Python_Queries.call_rasa.query_rasa(user_input.lower())
-        # if rasa_out['intent']['name'] in ['pick_up','drop','put_down']:
-        print("RASA output: ", rasa_out)
-        # else:
-        print("Intent: ", rasa_out['intent']['name'])
-    except:
-        print("RASA server is not up and running")
-        # return
 
-    # test.testingExtraction(rasa_out)
-    try:
-        instance = Python_Queries.postprocessings.postprocess(rasa_out, compound_props)
-        if instance is not None:
-            # print("Final Output")
-            instance.print_params()
+    def _refresh_output(self):
+        self._output.clear_output()
+        with self._output:
+            for key, value in self._dictionary.items():
+                print(f"{key}: {value}")
+
+    def _toggle_editable(self,_):
+        if self._editable:
+            self._update_dictionary()
+            self._refresh_output()
+            self._edit_button.description = "Edit"
+            self._editable = False
+            for widget in self._editable_widgets.values():
+              widget.close()
         else:
-            print("Post processed instance is None")
-    except:
-        print("Post Process error")
+            self._create_editable_widgets()
+            self._edit_button.description = "Save"
+            self._editable = True
 
-if __name__ == "__main__":
-    main()
+    def _create_editable_widgets(self):
+      self._output.clear_output()
+      self._editable_widgets = {}  
+      widgets_list = [self._output, widgets.HBox([self._edit_button])]
+      for key, value in self._dictionary.items():
+          self._editable_widgets[key] = widgets.Text(value=str(value), description=key)
+          widgets_list += (self._editable_widgets[key],)
+      self.grid.children = widgets_list
+      display(self.grid)
+
+    def _update_dictionary(self):
+        for key, widget in self._editable_widgets.items():
+            self._dictionary[key] = widget.value
+
+    def return_values(self) -> dict:
+      return self._dictionary
