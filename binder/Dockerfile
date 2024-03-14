@@ -7,11 +7,14 @@ RUN mamba install -y ripgrep
 RUN pip install --upgrade \
   sidecar \
   Cython \
+  openai \
   jupyterlab-git \
   jupyterlab-unfold \
   jupyter-archive \
   jupyterlab-search-replace \
   jupyter-offlinenotebook \
+  jupyter-collaboration \
+  jupyter-ai \
   jupyterlab-language-pack-de-DE  \
   jupyterlab_execute_time
 
@@ -23,7 +26,7 @@ COPY --chown=${NB_USER}:users binder/me ${ROS_WS}/src/me
 COPY --chown=${NB_USER}:users binder/noetic.rosinstall /home/${NB_USER}/noetic.rosinstall
 RUN wstool merge /home/${NB_USER}/noetic.rosinstall \
   && wstool update
-# Clone repos with git ssh url in .gitmodules
+# Clone repos with ssh url in .gitmodules
 RUN git clone https://github.com/maltehue/mujoco_robots.git \
   && cd mujoco_robots \
   && perl -i -p -e 's|git@(.*?):|https://\1/|g' .gitmodules \
@@ -45,7 +48,7 @@ RUN rosdep update && apt update && apt dist-upgrade -y \
 USER ${NB_USER}
 RUN pip install -r src/giskardpy/requirements.txt
 
-# Install missing python packages (should be included in requirements.txt)
+# Install missing python packages (should be included in src/giskardpy/requirements.txt)
 RUN pip install termcolor pydot triangle cython~=0.19
 
 # Building Custom bullet3 from source with Python 3.10 (in a clumsy way)
@@ -66,7 +69,10 @@ ENV PYTHONPATH=${PYTHONPATH}:/home/${NB_USER}/bullet3/build_cmake/better_python:
 
 # Build ROS workspace
 WORKDIR  ${ROS_WS}
+# Can not build package iai_pr2_donbot and it is not used
 RUN rm -rf src/iai_pr2/iai_pr2_donbot
+# Upldate rvizweb
+RUN cd src/rvizweb && git pull
 RUN catkin build
 
 RUN pip install --upgrade \
@@ -75,9 +81,9 @@ RUN pip install --upgrade \
   jupyter-ai
 
 # Chatbot configs
-COPY --chown=${NB_USER}:users binder/jupyter-ai.json /home/${NB_USER}/.local/share/jupyter/jupyter_ai/config.json
-ENV OPENAI_API_BASE="http://192.168.240.1:5002"
-ENV OPENAI_API_KEY="sk-4e6e40294b4da6fd87ddc0a4aae645a4"
+# COPY --chown=${NB_USER}:users binder/jupyter-ai.json /home/${NB_USER}/.local/share/jupyter/jupyter_ai/config.json
+# ENV OPENAI_API_BASE="http://192.168.240.1:5002"
+# ENV OPENAI_API_KEY="sk-4e6e40294b4da6fd87ddc0a4aae645a4"
 
 # -----------------------------------------------------------------------------
 # Initiate BOOTSTRAP workspace 
@@ -88,7 +94,7 @@ COPY --chown=${NB_USER}:users binder/bootstrap ${BOOT_WS}/src/
 # install the dependencies and packages in the requirements file
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN spacy download en_core_web_sm && spacy download en_core_web_trf
+RUN spacy download en_core_web_sm
 
 RUN python -m nltk.downloader punkt && python -m nltk.downloader wordnet
 # -----------------------------------------------------------------------------
@@ -101,24 +107,32 @@ COPY --chown=${NB_USER}:users binder/rasa ${RASA_WS}/src/
 # RUN conda env create --file environment.yml
 
 # install the dependencies and packages in the requirements file
-# RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 # RUN pip install pipenv
 # RUN pipenv install rasa==3.6.16
 # -----------------------------------------------------------------------------
 
 # Copy the giskard tmp meshes to skip the converting step
 COPY --chown=${NB_USER}:users binder/giskard_decomposed_obj ${ROS_WS}/src/giskardpy/tmp
-# The giskard standalone is not publishing tf by default change it to true by default
+# The giskard standalone does not publish tf messaages by default set it to true for rvizweb
 RUN sed -i 's/publish_tf: bool = False/publish_tf: bool = True/g' ${ROS_WS}/src/giskardpy/src/giskardpy/configs/behavior_tree_config.py
 # Copy contents of the repo into the image
 COPY --chown=${NB_USER}:users . /home/${NB_USER}/giskard_examples
 WORKDIR /home/${NB_USER}/giskard_examples
 RUN git config --global --add safe.directory ${PWD}
+# Soft link the ROS workspace directory to the working directory
 RUN ln -s ${ROS_WS} ${PWD}/ROS_WS
+# jupyterlab interface configuration
 COPY --chown=${NB_USER}:users binder/webapps.json ${ROS_WS}/src/rvizweb/webapps/app.json
 COPY --chown=${NB_USER}:users binder/jupyter-settings.json /opt/conda/share/jupyter/lab/settings/overrides.json
 COPY --chown=${NB_USER}:users binder/entrypoint.sh /
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["start-notebook.sh"]
 
+
 RUN cd ${ROS_WS}/src/rvizweb && git pull
+
+RUN pip install --upgrade --force-reinstall flask-sqlalchemy sqlalchemy
+
+RUN cd ${ROS_WS}/src/mujoco_robots && git pull
+
