@@ -5,6 +5,7 @@ from geometry_msgs.msg import PoseStamped, Vector3Stamped, PointStamped, Quatern
 from tf.transformations import quaternion_about_axis, quaternion_from_matrix
 
 from giskardpy.python_interface.python_interface import GiskardWrapper
+from giskardpy.utils.tfwrapper import lookup_pose
 
 
 def openGripper(giskard: GiskardWrapper):
@@ -80,6 +81,30 @@ def tilt(giskard: GiskardWrapper, angle: float, velocity: float, rotation_axis: 
     giskard.add_default_end_motion_conditions()
     giskard.execute()
 
+def move_arm(giskard: GiskardWrapper, direction: str, control_frame: str):
+    goal_pose = lookup_pose('map', control_frame)
+    if direction == 'up':
+        goal_pose.pose.position.z += 0.1
+    elif direction == 'down':
+        goal_pose.pose.position.z -= 0.1
+    elif direction == 'left':
+        goal_pose.pose.position.y += 0.1
+    elif direction == 'right':
+        goal_pose.pose.position.y -= 0.1
+    elif direction == 'forward':
+        goal_pose.pose.position.x += 0.1
+    elif direction == 'back':
+        goal_pose.pose.position.x -= 0.1
+
+    giskard.motion_goals.add_cartesian_pose(goal_pose=goal_pose, tip_link=control_frame, root_link='map')
+    giskard.add_default_end_motion_conditions()
+    giskard.execute()
+
+# def put_down(giskard: GiskardWrapper, location: PoseStamped, control_frame: str):
+#     giskard.motion_goals.add_cartesian_pose(goal_pose=location, tip_link=control_frame, root_link='map')
+#     giskard.add_default_end_motion_conditions()
+#     giskard.execute()
+
 def grasp(giskard: GiskardWrapper, object_name: str, robot_eeff: str, grasp_side: str, upright_axis: str, second_axis: str):
     # Here starts the control
     # Open the gripper. Needs the giskard interface as input, as all the other methods
@@ -93,60 +118,24 @@ def grasp(giskard: GiskardWrapper, object_name: str, robot_eeff: str, grasp_side
     closeGripper(giskard)
     giskard.execute()
 
-# if __name__ == '__main__':
-#     # Before running this script make sure to start a giskard instance using 'roslaunch giskardpy giskardpy_hsr_mujoco.launch'
-#     # And before that the mujoco simulation has to be running
-#     rospy.init_node('graspAndPour')
-#     gis = GiskardWrapper()
-#
-#     # Define some parameters used in the movement function
-#     # The endeffector link of the robot
-#     robot_eeff = 'hand_palm_link'
-#
-#     # Axis of the eeff that should be upright
-#     upright_axis = Vector3Stamped()
-#     upright_axis.header.frame_id = robot_eeff
-#     upright_axis.vector.x = 1
-#
-#     # A second axis of the eeff. Can be aligned to the x-axis of goal objects
-#     second_axis = Vector3Stamped()
-#     second_axis.header.frame_id = robot_eeff
-#     second_axis.vector.z = 1
-#
-#     # Here starts the control
-#     # Open the gripper. Needs the giskard interface as input, as all the other methods
-#     openGripper(gis)
-#
-#     # This aligns the control frame to the front of the object frame in a distance of 0.04m.
-#     align_to(gis, 'front', axis_align_to_z=upright_axis, object_frame='free_cup', control_frame=robot_eeff,
-#              axis_align_to_x=second_axis, distance=0.04)
-#
-#     # Close the gripper
-#     closeGripper(gis)
-#
-#     # Here the grasped cup is added to the kinematic model of the robot.
-#     # It is done to use the frame of the cup as a controlled frame.
-#     # This can be skipped if the 'hand_palm_link' should be used as a controlled frame after grasping.
-#     # First define the current pose of the grasped cup
-#     cup_pose = PoseStamped()
-#     cup_pose.header.frame_id = 'free_cup'
-#     cup_pose.pose.position = Point(0, 0, 0)
-#     cup_pose.pose.orientation.w = 1
-#     # Add the cup to the robot model name 'grasped_cup' and the known dimensions
-#     gis.world.add_box('grasped_cup', (0.07, 0.07, 0.18), pose=cup_pose, parent_link=robot_eeff)
-#     # Now update the robot_eeff reference to use the grasped cup
-#     robot_eeff = 'grasped_cup'
-#
-#     # This aligns the control frame to the left of the object frame in a distance of 0.13m.
-#     # Additionally, the control frame is 0.2m higher than the object frame. The second_distance paramter can be used to
-#     # to set an offset in the remaining dimension, here the x-axis of the object frame
-#     align_to(gis, 'left', axis_align_to_z=upright_axis, object_frame='free_cup2', control_frame=robot_eeff,
-#              axis_align_to_x=second_axis, distance=0.13, height_offset=0.2, second_distance=0.0)
-#
-#     # Prepare tilting be defining a tilt axis
-#     rotation_axis = Vector3Stamped()
-#     rotation_axis.header.frame_id = robot_eeff
-#     rotation_axis.vector.z = 1
-#
-#     # Tilt the controlled_frame by angle around the rotation axis with a maximum velocity of velocity.
-#     tilt(gis, angle=1.7, velocity=1.0, rotation_axis=rotation_axis, controlled_frame='hand_palm_link')
+def pick_up(giskard:  GiskardWrapper, object_name: str, robot_eeff: str, grasp_side: str, upright_axis: str, second_axis: str):
+
+    # first make an roslaunch giskardpy giskardpy_hsr_mujoco.launchattempt at grasping an object
+    grasp(giskard, object_name, robot_eeff, grasp_side, upright_axis, second_axis)
+
+    # # now, move the arm upward
+    move_arm(giskard, 'up', robot_eeff)
+
+
+def put_down(giskard: GiskardWrapper, goal_pose: PoseStamped, control_frame: str):
+
+    goal_pose = lookup_pose('map', control_frame)
+    giskard.motion_goals.add_cartesian_pose(goal_pose=goal_pose, tip_link=control_frame, root_link='map')
+    giskard.add_default_end_motion_conditions()
+    giskard.execute()
+    # giskard.add_default_end_motion_conditions()
+    # open the gripper
+    openGripper(giskard)
+    giskard.execute()
+    # # now, move the arm upward
+    # move_arm(giskard, 'up', robot_eeff)
