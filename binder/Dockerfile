@@ -12,7 +12,7 @@ SHELL ["conda", "run", "-n", "rasa38", "/bin/bash", "-c"]
 
 RUN python --version
 
-RUN pip install rasa && pip install spacy && pip install transformers
+RUN pip install rasa && pip install spacy && pip install transformers && spacy download en_core_web_sm
 
 # SHELL ["/bin/bash", "-c", "source ~/.bashrc && conda deactivate"]
 
@@ -63,6 +63,11 @@ RUN git clone https://github.com/HoangGiang93/mujoco_world.git \
 # Install dependencies
 WORKDIR  ${ROS_WS}
 USER root
+
+# Install Mongodb
+RUN apt install -y mongodb && \
+    mkdir -p /data/db && chown -R ${NB_USER}:users /data/db
+
 RUN rosdep update && apt update && apt dist-upgrade -y \
   && rosdep install -y --ignore-src --from-paths ./ -r \
   && rosdep fix-permissions \
