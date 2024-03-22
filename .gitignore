@@ -1,3 +1,6 @@
+binder/rasa/RASA/
+binder/rasa/models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
